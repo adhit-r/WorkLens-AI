@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "seed": "bun run seed-simple.ts",
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
@@ -10,13 +11,16 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "@supabase/supabase-js": "^2.47.10",
+    "@supabase/supabase-js": "^2.89.0",
+    "drizzle-orm": "^0.45.1",
     "hono": "^4.6.12",
+    "postgres": "^3.4.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
+    "@types/pg": "^8.16.0",
+    "drizzle-kit": "^0.31.8",
     "typescript": "^5.7.2"
   }
 }
-
