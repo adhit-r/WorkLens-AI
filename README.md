@@ -29,7 +29,8 @@ WorkLens AI is an intelligent platform that sits on top of your issue tracker (M
 | Requirement | How to Get It |
 |------------|---------------|
 | **Bun** (JavaScript runtime) | Go to [bun.sh](https://bun.sh) and follow install instructions |
-| **Supabase Account** (free) | Sign up at [supabase.com](https://supabase.com) |
+| **Neon Database** (free) | Sign up at [neon.tech](https://neon.tech) - Recommended |
+| **Supabase** (optional) | Only needed if using Supabase Auth - [supabase.com](https://supabase.com) |
 | **AI Provider** (choose one) | See [AI Provider Options](#-ai-provider-options) below |
 
 ### Step-by-Step Setup
@@ -48,7 +49,23 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 After installing, close and reopen your terminal.
 
-#### Step 2: Download and Install WorkLens
+#### Step 2: Set Up Neon Database (Recommended)
+
+1. **Create Neon Account**
+   - Go to [neon.tech](https://neon.tech)
+   - Sign up (free tier available)
+   - Create a new project
+
+2. **Get Connection String**
+   - Go to Dashboard → Connection Details
+   - Copy the connection string (looks like `postgresql://user:password@host/dbname`)
+
+3. **Run Database Schema**
+   - Go to Neon SQL Editor
+   - Copy contents of `supabase/seed.sql`
+   - Paste and run to create tables
+
+### Step 3: Download and Install WorkLens
 
 ```bash
 # Clone the repository
@@ -84,8 +101,14 @@ bun install
 ```bash
 # api/.env
 PORT=8787
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key-here
+
+# Database (Neon - Recommended)
+DB_TYPE=neon
+NEON_DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
+
+# OR use Supabase (if preferred)
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_ANON_KEY=your-anon-key-here
 
 # MANDATORY: Get this from https://aistudio.google.com/app/apikey
 GEMINI_API_KEY=your-gemini-key-here
@@ -99,9 +122,20 @@ Create a file called `.env.local` in the `app` folder:
 ```bash
 # app/.env.local
 NEXT_PUBLIC_API_URL=http://localhost:8787
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+
+# Optional: Only if using Supabase for auth
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
+
+#### Step 4: Seed the Database
+
+```bash
+cd api
+bun run seed
+```
+
+This will populate your database with synthetic data for testing.
 
 #### Step 5: Start the Application
 

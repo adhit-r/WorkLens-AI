@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, numeric, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, numeric, boolean, date } from 'drizzle-orm/pg-core';
 
 // Job Titles
 export const jobTitles = pgTable('ohrm_job_title', {
@@ -72,5 +72,19 @@ export const bugNotes = pgTable('mantis_bugnote_table', {
   noteText: text('note_text'),
   sourceSystem: text('source_system'),
   dateSubmitted: timestamp('date_submitted'),
+});
+
+// Holidays
+export const holidays = pgTable('ohrm_holiday', {
+  date: date('date'),
+  description: text('description'),
+});
+
+// Task Dependencies
+export const taskDependencies = pgTable('task_dependencies', {
+  parentTaskId: integer('parent_task_id'),
+  childTaskId: integer('child_task_id'),
+  dependencyType: text('dependency_type'),
+  sourceSystem: text('source_system'),
 });
 

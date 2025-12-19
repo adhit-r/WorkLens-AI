@@ -40,9 +40,9 @@ export async function authMiddleware(c: Context, next: Next) {
         teamId: 1,
       };
       c.set('user', mockUser);
-      // Create a service role client for direct DB access in dev mode
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      c.set('supabase', supabase as any);
+      // Use Neon adapter if configured, otherwise Supabase
+      const dbClient = useNeon ? createNeonAdapter() : createClient(supabaseUrl, supabaseAnonKey);
+      c.set('supabase', dbClient as any);
       return await next();
     }
     return c.json({ error: 'Unauthorized', message: 'Missing or invalid authorization header' }, 401);
