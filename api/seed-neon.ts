@@ -8,7 +8,7 @@
 import { config } from 'dotenv';
 import { join } from 'path';
 import { getDrizzleDb, closeConnections } from './src/db/client';
-import { jobTitles, employees, mantisUsers, projects, tasks, customFields, bugNotes } from './src/db/schema';
+import { jobTitles, employees, mantisUsers, projects, tasks, customFields, bugNotes, customFieldTable } from './src/db/schema';
 
 // Load .env
 config({ path: join(process.cwd(), '.env') });
@@ -76,19 +76,27 @@ async function seed() {
 
     console.log('📝 Inserting job titles...');
     await db.insert(jobTitles).values(seedData.jobTitles).onConflictDoNothing();
-    console.log('✅ Job titles inserted\n');
+    console.log(`✅ Inserted ${seedData.jobTitles.length} job titles\n`);
 
     console.log('📝 Inserting employees...');
     await db.insert(employees).values(seedData.employees).onConflictDoNothing();
-    console.log('✅ Employees inserted\n');
+    console.log(`✅ Inserted ${seedData.employees.length} employees\n`);
 
     console.log('📝 Inserting Mantis users...');
     await db.insert(mantisUsers).values(seedData.mantisUsers).onConflictDoNothing();
-    console.log('✅ Mantis users inserted\n');
+    console.log(`✅ Inserted ${seedData.mantisUsers.length} Mantis users\n`);
 
     console.log('📝 Inserting projects...');
     await db.insert(projects).values(seedData.projects).onConflictDoNothing();
-    console.log('✅ Projects inserted\n');
+    console.log(`✅ Inserted ${seedData.projects.length} projects\n`);
+
+    // Add custom field definitions (required for foreign key)
+    const customFieldDefs = [
+      { id: 4, name: 'ETA (Hours)', possibleValues: null, defaultValue: '0', sourceSystem: 'mantis' },
+    ];
+    console.log('📝 Inserting custom field definitions...');
+    await db.insert(customFieldTable).values(customFieldDefs).onConflictDoNothing();
+    console.log(`✅ Inserted ${customFieldDefs.length} custom field definitions\n`);
 
     // Add sample tasks
     const now = new Date();
@@ -96,13 +104,50 @@ async function seed() {
       { id: 1001, projectId: 1, reporterId: 8, handlerId: 1, status: 50, resolution: 10, eta: '16', summary: 'Design new authentication flow', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000) },
       { id: 1002, projectId: 1, reporterId: 8, handlerId: 2, status: 50, resolution: 10, eta: '24', summary: 'Implement OAuth2 integration', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
       { id: 1003, projectId: 1, reporterId: 8, handlerId: 3, status: 40, resolution: 10, eta: '8', summary: 'Create user settings page', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000) },
+      { id: 1004, projectId: 1, reporterId: 8, handlerId: 4, status: 50, resolution: 10, eta: '12', summary: 'Test authentication module', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 4 * 60 * 60 * 1000) },
+      { id: 1005, projectId: 1, reporterId: 8, handlerId: 1, status: 50, resolution: 10, eta: '20', summary: 'API rate limiting implementation', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000), lastUpdated: now },
       { id: 2001, projectId: 2, reporterId: 8, handlerId: 2, status: 50, resolution: 10, eta: '32', summary: 'Build ETL pipeline for analytics', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 6 * 60 * 60 * 1000) },
       { id: 2002, projectId: 2, reporterId: 8, handlerId: 6, status: 50, resolution: 10, eta: '16', summary: 'Create data visualization dashboard', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000) },
+      { id: 2003, projectId: 2, reporterId: 8, handlerId: 9, status: 40, resolution: 10, eta: '12', summary: 'Optimize database queries', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) },
+      { id: 3001, projectId: 3, reporterId: 8, handlerId: 3, status: 50, resolution: 10, eta: '24', summary: 'Mobile app navigation structure', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 3 * 60 * 60 * 1000) },
+      { id: 3002, projectId: 3, reporterId: 8, handlerId: 10, status: 50, resolution: 10, eta: '16', summary: 'Design mobile UI components', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000), dueDate: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000), lastUpdated: new Date(now.getTime() - 5 * 60 * 60 * 1000) },
     ];
 
     console.log('📝 Inserting tasks...');
     await db.insert(tasks).values(sampleTasks).onConflictDoNothing();
-    console.log('✅ Tasks inserted\n');
+    console.log(`✅ Inserted ${sampleTasks.length} tasks\n`);
+
+    // Add custom fields (ETA values)
+    const customFieldsData = [
+      { id: 1, fieldId: 4, bugId: 1001, value: '16', sourceSystem: 'mantis' },
+      { id: 2, fieldId: 4, bugId: 1002, value: '24', sourceSystem: 'mantis' },
+      { id: 3, fieldId: 4, bugId: 1003, value: '8', sourceSystem: 'mantis' },
+      { id: 4, fieldId: 4, bugId: 1004, value: '12', sourceSystem: 'mantis' },
+      { id: 5, fieldId: 4, bugId: 1005, value: '20', sourceSystem: 'mantis' },
+      { id: 6, fieldId: 4, bugId: 2001, value: '32', sourceSystem: 'mantis' },
+      { id: 7, fieldId: 4, bugId: 2002, value: '16', sourceSystem: 'mantis' },
+      { id: 8, fieldId: 4, bugId: 2003, value: '12', sourceSystem: 'mantis' },
+      { id: 9, fieldId: 4, bugId: 3001, value: '24', sourceSystem: 'mantis' },
+      { id: 10, fieldId: 4, bugId: 3002, value: '16', sourceSystem: 'mantis' },
+    ];
+
+    console.log('📝 Inserting custom fields...');
+    await db.insert(customFields).values(customFieldsData).onConflictDoNothing();
+    console.log(`✅ Inserted ${customFieldsData.length} custom fields\n`);
+
+    // Add bug notes (time tracking)
+    const bugNotesData = [
+      { id: 1, bugId: 1001, reporterId: 1, timeTracking: 480, noteText: 'Initial design complete', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000) },
+      { id: 2, bugId: 1001, reporterId: 1, timeTracking: 240, noteText: 'Revised based on feedback', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) },
+      { id: 3, bugId: 1002, reporterId: 2, timeTracking: 600, noteText: 'OAuth2 setup and configuration', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000) },
+      { id: 4, bugId: 1002, reporterId: 2, timeTracking: 480, noteText: 'Integration testing', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
+      { id: 5, bugId: 2001, reporterId: 2, timeTracking: 960, noteText: 'ETL pipeline design', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000) },
+      { id: 6, bugId: 2001, reporterId: 2, timeTracking: 720, noteText: 'Pipeline implementation', sourceSystem: 'mantis', dateSubmitted: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000) },
+    ];
+
+    console.log('📝 Inserting bug notes...');
+    await db.insert(bugNotes).values(bugNotesData).onConflictDoNothing();
+    console.log(`✅ Inserted ${bugNotesData.length} bug notes\n`);
 
     console.log('🎉 Database seeded successfully!');
     console.log('\n📊 Summary:');
@@ -111,6 +156,8 @@ async function seed() {
     console.log(`   - ${seedData.mantisUsers.length} Mantis users`);
     console.log(`   - ${seedData.projects.length} projects`);
     console.log(`   - ${sampleTasks.length} tasks`);
+    console.log(`   - ${customFieldsData.length} custom fields`);
+    console.log(`   - ${bugNotesData.length} bug notes`);
 
   } catch (error: any) {
     console.error('❌ Seeding failed:', error.message);

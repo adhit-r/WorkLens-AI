@@ -5,6 +5,9 @@ import { WorkloadStateClassifier } from '../sql/workload-states';
 import { AuthUser } from '../middleware/auth';
 import { CodeRedError } from '../middleware/error';
 import { SchemaContextBuilder } from '../sql/schema-context';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 // Simple UUID generator
 function uuidv4(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -104,25 +107,46 @@ export class Chatbot {
     
     const userContext = await this.buildContext(request.user);
     const schemaContext = SchemaContextBuilder.getFullContext();
+    
+    // Read SQL_Query_Rules.txt content
+    const sqlRulesPath = join(process.cwd(), '..', 'SQL_Query_Rules.txt');
+    let sqlRulesContent = '';
+    try {
+      sqlRulesContent = readFileSync(sqlRulesPath, 'utf-8');
+    } catch (error) {
+      console.warn('Could not read SQL_Query_Rules.txt, using schema context only');
+      sqlRulesContent = SchemaContextBuilder.getSQLRulesContext();
+    }
 
-    // Generate SQL from natural language - Very concise prompt
-    const sqlPrompt = `You are a SQL expert. Generate a PostgreSQL query.
+    // Generate SQL from natural language - Using full SQL_Query_Rules.txt
+    const sqlPrompt = `You are a SQL expert generating PostgreSQL queries for WorkLens AI.
 
-TABLES: mantis_bug_table (b), mantis_project_table (p), mantis_user_table (u), mantis_custom_field_string_table (eta), mantis_bugnote_table (n), hs_hr_employee (e), ohrm_job_title (jt)
+${schemaContext}
 
-RULES:
-- ALL joins must include: table1.source_system = table2.source_system
-- Active tasks: b.status NOT IN (80, 90)
-- Time tracking: SUM(n.time_tracking) / 60.0 (convert minutes to hours)
-- ETA: CAST(eta.value AS NUMERIC) WHERE eta.field_id = 4
-- User-Employee join: LOWER(TRIM(u.email)) = LOWER(TRIM(e.emp_work_email))
-- Status: Use CASE WHEN b.status = 10 THEN 'New' WHEN b.status = 50 THEN 'Assigned' WHEN b.status = 80 THEN 'Resolved' WHEN b.status = 90 THEN 'Closed' END
+=== ADDITIONAL CRITICAL RULES FROM SQL_Query_Rules.txt ===
 
-USER QUERY: "${request.message}"
+${sqlRulesContent}
+
+=== USER QUERY ===
+"${request.message}"
+
+=== REQUIREMENTS ===
+1. Generate PostgreSQL-compatible SQL (NOT SQL Server T-SQL)
+2. Convert SQL Server syntax to PostgreSQL:
+   - GETDATE() → CURRENT_DATE or NOW()
+   - DATEFROMPARTS() → DATE(year, month, day) or make_date(year, month, day)
+   - EOMONTH() → DATE_TRUNC('month', date) + INTERVAL '1 month' - INTERVAL '1 day'
+   - CONCAT() → || operator or CONCAT() (both work in PostgreSQL)
+   - TRY_CAST() → CAST() or :: operator
+   - MAXRECURSION → Not needed in PostgreSQL
+3. ALWAYS include source_system in ALL joins
+4. ALWAYS convert status/resolution codes to labels using CASE statements
+5. For "Bug ID" or "Mantis ID", use column name "mantis_id" and display header as "MANTIS ID"
+6. If query is out of domain, set isOutOfDomain: true
 
 You MUST respond with ONLY valid JSON, no other text:
 {
-  "sql": "SELECT ...",
+  "sql": "SELECT ... (PostgreSQL syntax)",
   "explanation": "Brief description",
   "isOutOfDomain": false
 }`;
@@ -646,12 +670,29 @@ Limit to 3-5 most impactful recommendations.`;
   p.name AS project_name,
   CASE 
     WHEN b.status = 10 THEN 'New'
+    WHEN b.status = 20 THEN 'Feedback'
+    WHEN b.status = 30 THEN 'Acknowledged'
     WHEN b.status = 40 THEN 'Confirmed'
     WHEN b.status = 50 THEN 'Assigned'
+    WHEN b.status = 60 THEN 'Movedout'
+    WHEN b.status = 70 THEN 'Deferred'
     WHEN b.status = 80 THEN 'Resolved'
     WHEN b.status = 90 THEN 'Closed'
-    ELSE 'Other'
+    WHEN b.status = 100 THEN 'Reopen'
+    ELSE 'Unknown'
   END AS status_label,
+  CASE 
+    WHEN b.resolution = 10 THEN 'Open'
+    WHEN b.resolution = 20 THEN 'Fixed'
+    WHEN b.resolution = 30 THEN 'Reopened'
+    WHEN b.resolution = 40 THEN 'Unable to Reproduce'
+    WHEN b.resolution = 50 THEN 'Duplicate'
+    WHEN b.resolution = 60 THEN 'No Change Required'
+    WHEN b.resolution = 70 THEN 'Not Fixable'
+    WHEN b.resolution = 80 THEN 'Suspended'
+    WHEN b.resolution = 90 THEN 'Won''t Fix'
+    ELSE 'Open'
+  END AS resolution_label,
   e.emp_firstname || ' ' || e.emp_lastname AS assigned_to
 FROM mantis_bug_table b
 JOIN mantis_project_table p ON b.project_id = p.id AND b.source_system = p.source_system
@@ -663,27 +704,33 @@ ORDER BY b.last_updated DESC
 LIMIT 50`;
     }
     
-    // Team bandwidth query
+    // Team bandwidth query - per SQL_Query_Rules.txt output formatting (lines 283-287)
     if (lowerMessage.includes('bandwidth') || lowerMessage.includes('capacity')) {
       return `SELECT 
-  e.emp_firstname || ' ' || e.emp_lastname AS employee_name,
-  jt.job_title,
-  ROUND(SUM(CAST(COALESCE(eta.value, '0') AS NUMERIC)), 2) AS total_eta_hours,
-  ROUND(SUM(COALESCE(n.time_tracking, 0)) / 60.0, 2) AS time_spent_hours
-FROM hs_hr_employee e
-JOIN ohrm_job_title jt ON e.job_title_code = jt.id AND e.source_system = jt.source_system
-JOIN mantis_user_table u ON LOWER(TRIM(u.email)) = LOWER(TRIM(e.emp_work_email))
-JOIN mantis_bug_table b ON b.handler_id = u.id AND b.source_system = u.source_system
+  p.name AS project,
+  cf.value AS task_type,
+  e.emp_firstname || ' ' || e.emp_lastname AS resource_name,
+  ROUND(SUM(CAST(COALESCE(eta.value, '0') AS NUMERIC)), 2) AS "ETA(h)",
+  ROUND(SUM(COALESCE(n.time_tracking, 0)) / 60.0, 2) AS "TIME SPENT(h)",
+  ROUND(GREATEST(0, 40 - (SUM(CAST(COALESCE(eta.value, '0') AS NUMERIC)) - SUM(COALESCE(n.time_tracking, 0)) / 60.0))), 2) AS "REMAINING BANDWIDTH(h)",
+  ROUND((SUM(COALESCE(n.time_tracking, 0)) / 60.0 / 40.0) * 100, 2) AS "UTILIZATION(%)",
+  ROUND((GREATEST(0, 40 - (SUM(CAST(COALESCE(eta.value, '0') AS NUMERIC)) - SUM(COALESCE(n.time_tracking, 0)) / 60.0))) / 40.0 * 100, 2) AS "AVAILABILITY(%)"
+FROM mantis_bug_table b
+JOIN mantis_project_table p ON b.project_id = p.id AND b.source_system = p.source_system
+JOIN mantis_user_table u ON b.handler_id = u.id AND b.source_system = u.source_system
+JOIN hs_hr_employee e ON LOWER(TRIM(u.email)) = LOWER(TRIM(e.emp_work_email))
 LEFT JOIN mantis_custom_field_string_table eta ON b.id = eta.bug_id AND eta.field_id = 4 AND b.source_system = eta.source_system
+LEFT JOIN mantis_custom_field_string_table cf ON b.id = cf.bug_id AND cf.field_id IN (40, 54) AND b.source_system = cf.source_system
 LEFT JOIN (
   SELECT bug_id, source_system, SUM(time_tracking) AS time_tracking
   FROM mantis_bugnote_table
   GROUP BY bug_id, source_system
 ) n ON b.id = n.bug_id AND b.source_system = n.source_system
-WHERE e.source_system = 'hrms'
-  AND b.source_system = 'mantis'
+WHERE b.source_system = 'mantis'
   AND b.status NOT IN (80, 90)
-GROUP BY e.emp_number, e.emp_firstname, e.emp_lastname, jt.job_title`;
+GROUP BY p.name, cf.value, e.emp_firstname, e.emp_lastname
+ORDER BY "REMAINING BANDWIDTH(h)" ASC
+LIMIT 50;`;
     }
     
     return null;

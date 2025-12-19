@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { getStatusLabel, getResolutionLabel, isActiveStatus } from '../utils/status-mappings';
 
 interface WorkloadMetricsOptions {
   period: 'week' | 'month';
@@ -195,16 +196,17 @@ export class SQLEngine {
           .in('bug_id', taskIds)
           .eq('source_system', this.sourceSystem);
 
-        totalTimeSpent = (bugnotes?.reduce((sum, n) => sum + (n.time_tracking || 0), 0) || 0) / 60;
+        // Time Spent(h): Sum all logged minutes, convert to hours, treat null as 0, ROUND to 2 decimals
+        totalTimeSpent = Math.round(((bugnotes?.reduce((sum, n) => sum + (n.time_tracking || 0), 0) || 0) / 60.0) * 100) / 100;
       }
 
-      // Calculate ETA from custom field #4
-      const totalEta = tasks?.reduce((sum, t) => {
+      // ETA(h): Sum all values from custom field #4, treat null/empty as 0, ROUND to 2 decimals
+      const totalEta = Math.round((tasks?.reduce((sum, t) => {
         const etaField = (t.mantis_custom_field_string_table as any[])?.find(
           (cf: any) => cf.field_id === 4
         );
         return sum + (parseFloat(etaField?.value || '0') || 0);
-      }, 0) || 0;
+      }, 0) || 0) * 100) / 100;
 
       // Calculate metrics per SQL_Query_Rules
       const yetToSpend = Math.round((totalEta - totalTimeSpent) * 100) / 100;
@@ -235,6 +237,7 @@ export class SQLEngine {
         activeTaskCount: tasks?.length || 0,
         overEtaPct,
         underEtaPct,
+        // Remarks: If Time Spent > ETA then 'Over ETA', else 'Within ETA'
         remarks: totalTimeSpent > totalEta ? 'Over ETA' : 'Within ETA',
       });
     }
@@ -290,24 +293,16 @@ export class SQLEngine {
 
     const { data } = await query;
 
-    // Map status/resolution to labels
-    const statusLabels: Record<number, string> = {
-      10: 'New', 20: 'Feedback', 30: 'Acknowledged', 40: 'Confirmed',
-      50: 'Assigned', 60: 'Movedout', 70: 'Deferred', 80: 'Resolved',
-      90: 'Closed', 100: 'Reopen'
-    };
-
-    const resolutionLabels: Record<number, string> = {
-      10: 'Open', 20: 'Fixed', 30: 'Reopened', 40: 'Unable to reproduce',
-      50: 'Not fixable', 60: 'Duplicate', 70: 'No change required',
-      80: 'Suspended', 90: "Won't fix"
-    };
-
     return data?.map(task => ({
-      id: task.id,
+      mantis_id: task.id, // Use mantis_id per SQL_Query_Rules.txt
+      id: task.id, // Keep for backward compatibility
       summary: task.summary,
-      status: statusLabels[task.status] || task.status,
-      resolution: resolutionLabels[task.resolution] || task.resolution,
+      status: getStatusLabel(task.status), // Always use label, never raw code
+      status_code: task.status, // Keep code for filtering if needed
+      status_label: getStatusLabel(task.status), // Explicit label field
+      resolution: getResolutionLabel(task.resolution), // Always use label
+      resolution_code: task.resolution, // Keep code for filtering if needed
+      resolution_label: getResolutionLabel(task.resolution), // Explicit label field
       project: (task.mantis_project_table as any)?.name,
       eta: (task.mantis_custom_field_string_table as any[])?.find(
         (cf: any) => cf.field_id === 4

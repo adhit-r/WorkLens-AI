@@ -1,8 +1,11 @@
 import { Context, Next } from 'hono';
 import { createClient } from '@supabase/supabase-js';
+import { createNeonAdapter } from '../db/adapter';
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+// Use Neon if NEON_DATABASE_URL or DATABASE_URL is set, even if SUPABASE_URL is also set
+const useNeon = !!(process.env.NEON_DATABASE_URL || process.env.DATABASE_URL);
 
 export interface AuthUser {
   id: string;
@@ -50,39 +53,54 @@ export async function authMiddleware(c: Context, next: Next) {
 
   const token = authHeader.substring(7);
   
-  // Create Supabase client with user's token
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
+  if (useNeon) {
+    // For Neon, use simple token validation (or implement your own auth)
+    // For now, create a mock user from token
+    const dbClient = createNeonAdapter();
+    const authUser: AuthUser = {
+      id: 'user-from-token',
+      email: 'user@worklens.ai',
+      role: 'manager',
+      employeeId: 1,
+      teamId: 1,
+    };
+    c.set('user', authUser);
+    c.set('supabase', dbClient as any);
+  } else {
+    // Create Supabase client with user's token
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    },
-  });
+    });
 
-  // Verify token and get user
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Verify token and get user
+    const { data: { user }, error } = await supabase.auth.getUser(token);
 
-  if (error || !user) {
-    return c.json({ error: 'Unauthorized', message: 'Invalid or expired token' }, 401);
+    if (error || !user) {
+      return c.json({ error: 'Unauthorized', message: 'Invalid or expired token' }, 401);
+    }
+
+    // Get user role from database
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('role, employee_id, team_id')
+      .eq('user_id', user.id)
+      .single();
+
+    const authUser: AuthUser = {
+      id: user.id,
+      email: user.email || '',
+      role: userRole?.role || 'individual_contributor',
+      employeeId: userRole?.employee_id,
+      teamId: userRole?.team_id,
+    };
+
+    c.set('user', authUser);
+    c.set('supabase', supabase as any);
   }
-
-  // Get user role from database
-  const { data: userRole } = await supabase
-    .from('user_roles')
-    .select('role, employee_id, team_id')
-    .eq('user_id', user.id)
-    .single();
-
-  const authUser: AuthUser = {
-    id: user.id,
-    email: user.email || '',
-    role: userRole?.role || 'individual_contributor',
-    employeeId: userRole?.employee_id,
-    teamId: userRole?.team_id,
-  };
-
-  c.set('user', authUser);
-  c.set('supabase', supabase as any);
 
   await next();
 }

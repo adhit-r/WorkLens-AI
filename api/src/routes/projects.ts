@@ -8,17 +8,23 @@ const projects = new Hono();
 projects.get('/', async (c) => {
   const supabase = c.get('supabase');
   
-  const { data, error } = await supabase
-    .from('mantis_project_table')
-    .select('id, name, status, description, source_system')
-    .eq('enabled', 1)
-    .order('name');
+  try {
+    const { data, error } = await supabase
+      .from('mantis_project_table')
+      .select('id, name, status, description, source_system')
+      .eq('enabled', 1)
+      .order('name');
 
-  if (error) {
-    return c.json({ error: 'Failed to fetch projects' }, 500);
+    if (error) {
+      console.error('Projects fetch error:', error);
+      return c.json({ error: 'Failed to fetch projects', details: error.message }, 500);
+    }
+
+    return c.json({ projects: data || [] });
+  } catch (err: any) {
+    console.error('Projects route error:', err);
+    return c.json({ error: 'Failed to fetch projects', details: err.message }, 500);
   }
-
-  return c.json({ projects: data });
 });
 
 // Get project details with metrics

@@ -7,12 +7,15 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate:schema": "bun run scripts/validate-schema.ts",
+    "validate:sql": "bun run scripts/validate-sql-rules.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.89.0",
     "drizzle-orm": "^0.45.1",
+    "glob": "^13.0.0",
     "hono": "^4.6.12",
     "postgres": "^3.4.7",
     "zod": "^3.23.8"
